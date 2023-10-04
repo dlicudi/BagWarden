@@ -1,0 +1,10 @@
+## Interface: 11304
+## Title: BagWarden
+## Notes: Checks if items are in your bags.
+## Author: Duane/Pogge
+## Version: 1.0
+## SavedVariables: BagWardenData
+
+BagWardenLib.lua
+BagWarden.lua
+BagWardenSets.lua
