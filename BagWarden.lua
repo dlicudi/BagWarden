@@ -143,10 +143,15 @@ SlashCmdList["BagWarden"] = function(msg)
         end
     elseif cmd == "remove" then
         local item_name = rest:match("^(.+)$")
-        if item_name then item_name = item_name:match("^%s*(.-)%s*$") end
+        if item_name then 
+            item_name = item_name:match("^%s*(.-)%s*$") 
+        end
         local currentSetTable = BagWardenData.itemSets[BagWardenData.currentSet]
-        for i, item in ipairs(currentSetTable) do
-            table.remove(currentSetTable, i)
+        for i = #currentSetTable, 1, -1 do
+            if currentSetTable[i].name == item_name then
+                table.remove(currentSetTable, i)
+                break  -- assuming each item name is unique within a set
+            end
         end
         CheckItems()
         print("Removed " .. item_name .. " from the item check list.")
