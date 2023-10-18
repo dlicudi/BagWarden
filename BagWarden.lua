@@ -153,7 +153,14 @@ SlashCmdList["BagWarden"] = function(msg)
                 break  -- assuming each item name is unique within a set
             end
         end
+        
+        -- Clear all previous item texts and update the frame with the new list.
+        for _, itemText in ipairs(itemTexts) do
+            itemText:Hide()
+        end
+        itemTexts = {}
         CheckItems()
+    
         print("Removed " .. item_name .. " from the item check list.")
     elseif cmd == "load" then
         local setName = rest:match("^(.+)$")
@@ -219,3 +226,4 @@ SlashCmdList["BagWarden"] = function(msg)
         print("Invalid command. Use: /bw, /bw toggle, /bw add <item_name> <min_count>, /bw remove <item_name>, /bw save <set_name>, /bw load <set_name>, /bw list, /bw reset, or /bw help")
     end
 end
+
