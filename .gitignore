@@ -1,2 +1,4 @@
 .DS_Store
 .vscode/settings.json
+dist/
+.vscode/tasks.json
