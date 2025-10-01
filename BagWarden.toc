@@ -2,11 +2,9 @@
 ## Title: BagWarden
 ## Notes: Checks if items are in your bags.
 ## Author: Duane - Pyrewood Village
-## Version: 1.7.0
+## Version: 1.7.1
 ## SavedVariables: BagWardenData
-## Dependencies: Ace3
+## OptionalDeps: Ace3
 
-BagWardenLib.lua
 BagWarden.lua
-BagWardenSets.lua
 

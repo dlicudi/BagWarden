@@ -1,0 +1,10 @@
+package-as: BagWarden
+ignore:
+  - update_version.sh
+  - dist/
+  - docs/
+  - tests/
+  - .vscode/
+  - screenshots/
+  - README.md
+  - CLAUDE.md
