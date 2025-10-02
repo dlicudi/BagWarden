@@ -2,7 +2,7 @@
 ## Title: BagWarden
 ## Notes: Checks if items are in your bags.
 ## Author: Duane - Pyrewood Village
-## Version: 1.7.2
+## Version: 1.7.3
 ## SavedVariables: BagWardenData
 ## OptionalDeps: Ace3
 
