@@ -332,6 +332,7 @@ local function updateContent()
     local buttonBar = AceGUI:Create("SimpleGroup")
     buttonBar:SetFullWidth(true)
     buttonBar:SetLayout("Flow")
+    buttonBar.frame:EnableMouse(false)
 
     local newSetBtn = AceGUI:Create("Button")
     newSetBtn:SetText("New Set")
