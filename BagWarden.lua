@@ -4,6 +4,23 @@ local ADDON_NAME = "BagWarden"
 
 local AceGUI = LibStub("AceGUI-3.0")
 
+local EXPORT_DELIMITER = "~"
+
+local function splitByDelimiter(str, delimiter)
+    local results = {}
+    local startPos = 1
+    local delimStart, delimEnd = string.find(str, delimiter, startPos, true)
+
+    while delimStart do
+        table.insert(results, string.sub(str, startPos, delimStart - 1))
+        startPos = delimEnd + 1
+        delimStart, delimEnd = string.find(str, delimiter, startPos, true)
+    end
+
+    table.insert(results, string.sub(str, startPos))
+    return results
+end
+
 -- State
 local mainWindow
 local currentSelection = nil
@@ -169,10 +186,7 @@ local function showImportDialog()
             for line in text:gmatch("[^\r\n]+") do
                 line = line:match("^%s*(.-)%s*$") -- Trim whitespace
                 if line ~= "" then
-                    local parts = {}
-                    for part in line:gmatch("[^|]+") do
-                        table.insert(parts, part)
-                    end
+                    local parts = splitByDelimiter(line, EXPORT_DELIMITER)
 
                     if #parts > 0 then
                         local setName = parts[1]
@@ -236,27 +250,46 @@ local function showExportDialog()
     for setName, items in pairs(BagWardenData.itemSets) do
         -- Skip empty sets
         if #items > 0 then
-            local line = setName
+            local parts = {setName}
             for _, item in ipairs(items) do
-                -- Strip color codes from item names
+                -- Strip color codes and item link formatting from item names
                 local cleanName = item.name
-                -- Remove Hitem links first
-                cleanName = cleanName:gsub("Hitem:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:[^|]*:", "")
-                -- Remove color codes
-                cleanName = cleanName:gsub("|c%x%x%x%x%x%x%x%x", "")
-                -- Remove |h and |r tags
-                cleanName = cleanName:gsub("|h", "")
-                cleanName = cleanName:gsub("|r", "")
-                -- Remove brackets
-                cleanName = cleanName:gsub("%[(.-)%]", "%1")
 
-                line = line .. "|" .. cleanName .. ":" .. (item.minCount or 0)
+                -- If it's an item link, extract just the name
+                if cleanName:match("|H") then
+                    -- Extract item name from link format: |cXXXXXXXX|Hitem:...|h[Name]|h|r
+                    local extractedName = cleanName:match("%[(.-)%]")
+                    if extractedName then
+                        cleanName = extractedName
+                    else
+                        -- Fallback: strip all formatting manually
+                        cleanName = cleanName:gsub("|c%x%x%x%x%x%x%x%x", "")
+                        cleanName = cleanName:gsub("|H.-|h", "")
+                        cleanName = cleanName:gsub("|h", "")
+                        cleanName = cleanName:gsub("|r", "")
+                        cleanName = cleanName:gsub("%[(.-)%]", "%1")
+                    end
+                else
+                    -- Plain text - remove brackets if present
+                    if cleanName:sub(1,1) == "[" and cleanName:sub(-1) == "]" then
+                        cleanName = cleanName:sub(2, -2)
+                    end
+                end
+
+                -- Remove any newline/control characters that might be in the name
+                cleanName = cleanName:gsub("[\r\n]", "")
+
+                table.insert(parts, cleanName .. ":" .. (item.minCount or 0))
             end
-            table.insert(exportLines, line)
+            table.insert(exportLines, table.concat(parts, EXPORT_DELIMITER))
         end
     end
+
     table.sort(exportLines)
     local exportString = table.concat(exportLines, "\n")
+
+    -- Store in a global variable so it can be accessed
+    _G.BagWardenExportData = exportString
 
     local editBox = AceGUI:Create("MultiLineEditBox")
     editBox:SetLabel("Copy export strings (Ctrl+A, Ctrl+C):")
@@ -265,11 +298,19 @@ local function showExportDialog()
     editBox:SetText(exportString)
     editBox:SetMaxLetters(0)
     editBox:DisableButton(true)
+
+    -- Disable editing to prevent corruption
+    editBox.editBox:SetEnabled(true)
+    editBox.editBox:SetAutoFocus(false)
+
     frame:AddChild(editBox)
 
     -- Auto-select all text
-    editBox:SetFocus()
-    editBox.editBox:HighlightText()
+    C_Timer.After(0.1, function()
+        editBox:SetFocus()
+        editBox.editBox:HighlightText()
+        editBox.editBox:SetCursorPosition(0)
+    end)
 
     frame:Show()
 end
@@ -301,7 +342,7 @@ local function updateContent()
     buttonBar:AddChild(newSetBtn)
 
     local renameSetBtn = AceGUI:Create("Button")
-    renameSetBtn:SetText("Rename")
+    renameSetBtn:SetText("Rename Set")
     renameSetBtn:SetWidth(80)
     renameSetBtn:SetCallback("OnClick", function()
         if currentSelection and currentSelection:match("^set_") then
@@ -347,9 +388,13 @@ local function updateContent()
     addGroup:SetFullWidth(true)
     addGroup:SetLayout("Flow")
 
+    -- Disable any highlight on the add group
+    addGroup.frame:EnableMouse(false)
+
     local editBox = AceGUI:Create("EditBox")
     editBox:SetLabel("Add Item")
     editBox:SetRelativeWidth(0.7)
+    editBox:SetText("")  -- Ensure it starts empty
     editBox:SetCallback("OnEnterPressed", function(widget, _, text)
         if text ~= "" then
             table.insert(items, {name = text, minCount = 0})
@@ -463,15 +508,45 @@ local function updateContent()
         row:SetFullWidth(true)
         row:SetLayout("Flow")
 
-        -- Make row frame mouse-enabled to capture all hover events
-        row.frame:EnableMouse(true)
+        -- Set fixed height for consistent row size
+        row:SetHeight(22)
 
-        -- Add highlight background to entire row
-        local rowHighlight = row.frame:CreateTexture(nil, "HIGHLIGHT")
-        rowHighlight:SetAllPoints(row.frame)
-        rowHighlight:SetColorTexture(0, 1, 0, 0.2)
-        rowHighlight:SetBlendMode("ADD")
-        rowHighlight:Hide()
+        -- Create background highlight texture (like BagSync)
+        local highlight = row.frame:CreateTexture(nil, "BACKGROUND")
+        highlight:SetAllPoints(row.frame)
+        highlight:SetColorTexture(0, 1, 0, 0.2)
+        highlight:SetBlendMode("ADD")
+        highlight:Hide()
+
+        -- Make the row frame clickable/hoverable
+        row.frame:EnableMouse(true)
+        row.frame:SetScript("OnEnter", function(self)
+            highlight:Show()
+
+            -- Show tooltip
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            local itemName = currentItem.name:match("%[(.-)%]") or currentItem.name
+            GameTooltip:ClearLines()
+
+            local itemLink = nil
+            if currentItem.name:match("|H") then
+                itemLink = currentItem.name
+            else
+                itemLink = getItemLinkEnhanced(itemName)
+            end
+
+            if itemLink then
+                GameTooltip:SetHyperlink(itemLink)
+            else
+                GameTooltip:SetText(currentItem.name, 1, 1, 1)
+                GameTooltip:AddLine("Count in bags: " .. count, 1, 1, 1)
+            end
+            GameTooltip:Show()
+        end)
+        row.frame:SetScript("OnLeave", function()
+            highlight:Hide()
+            GameTooltip:Hide()
+        end)
 
         -- Add icon
         local icon = AceGUI:Create("Icon")
@@ -492,55 +567,22 @@ local function updateContent()
         end
 
         icon:SetImageSize(18, 18)
+        icon.frame:EnableMouse(false)  -- Let mouse events pass through to row
         row:AddChild(icon)
 
-        local nameLabel = AceGUI:Create("InteractiveLabel")
+        -- Add spacing between icon and text
+        local spacer = AceGUI:Create("Label")
+        spacer:SetWidth(8)
+        spacer:SetText("")
+        spacer.label:EnableMouse(false)
+        row:AddChild(spacer)
+
+        local nameLabel = AceGUI:Create("Label")
         nameLabel:SetRelativeWidth(0.48)
         nameLabel:SetText(currentItem.name)
         nameLabel:SetColor(unpack(color))
         nameLabel.label:SetFont(nameLabel.label:GetFont(), 12)
-
-        -- Shared function for showing tooltip
-        local function showTooltip()
-            GameTooltip:SetOwner(row.frame, "ANCHOR_RIGHT")
-            -- Try to show item tooltip
-            local itemName = currentItem.name:match("%[(.-)%]") or currentItem.name
-            GameTooltip:ClearLines()
-
-            -- First check if item.name is already an item link
-            local itemLink = nil
-            if currentItem.name:match("|H") then
-                itemLink = currentItem.name
-            else
-                -- Try to get item link
-                itemLink = getItemLinkEnhanced(itemName)
-            end
-
-            if itemLink then
-                GameTooltip:SetHyperlink(itemLink)
-            else
-                -- Fallback to simple text
-                GameTooltip:SetText(currentItem.name, 1, 1, 1)
-                GameTooltip:AddLine("Count in bags: " .. count, 1, 1, 1)
-            end
-            GameTooltip:Show()
-        end
-
-        -- Add hover events to row frame (handles highlight)
-        row.frame:SetScript("OnEnter", function()
-            rowHighlight:Show()
-            showTooltip()
-        end)
-        row.frame:SetScript("OnLeave", function()
-            rowHighlight:Hide()
-            GameTooltip:Hide()
-        end)
-
-        -- Propagate mouse enter to row frame from child widgets
-        local function propagateEnter()
-            row.frame:GetScript("OnEnter")(row.frame)
-        end
-
+        nameLabel.label:EnableMouse(false)  -- Let mouse events pass through to row
         row:AddChild(nameLabel)
 
         local countLabel = AceGUI:Create("Label")
@@ -548,6 +590,7 @@ local function updateContent()
         countLabel:SetText(string.format("%d/%d", count, currentItem.minCount or 0))
         countLabel:SetColor(unpack(color))
         countLabel.label:SetFont(countLabel.label:GetFont(), 12)
+        countLabel.label:EnableMouse(false)  -- Let mouse events pass through to row
         row:AddChild(countLabel)
 
         local minusLbl = AceGUI:Create("InteractiveLabel")
